@@ -1,15 +1,31 @@
+import axios, { AxiosInstance } from 'axios';
+import { BrowserContext } from 'playwright';
 import { config } from '../config.js';
 import { ApiErrorResponse } from '../types/index.js';
+
+export interface AuthenticatedHttpClients {
+  axiosInstance: AxiosInstance;
+  headers: Record<string, string>;
+}
+
+export interface AuthValidationResult {
+  valid: boolean;
+  username?: string | null;
+  error?: string | null;
+}
 
 export class SessionAuthError extends Error {
   public readonly statusCode: number = 401;
   public readonly code: string = 'SESSION_EXPIRED_OR_INVALID';
   public readonly manualAction: string;
 
-  constructor(message = 'LinkedIn session cookie (li_at / JSESSIONID) is missing, expired, or invalid.') {
+  constructor(
+    message = 'LinkedIn session cookie (li_at / JSESSIONID) is missing, expired, or invalid.',
+    manualAction = 'Log into linkedin.com in your browser, open DevTools -> Application -> Cookies -> https://www.linkedin.com, copy the fresh "li_at" (and "JSESSIONID") value into your .env file (LI_AT_COOKIE / LI_JSESSIONID), and restart the application.'
+  ) {
     super(message);
     this.name = 'SessionAuthError';
-    this.manualAction = 'Log into linkedin.com in your browser, open DevTools -> Application -> Cookies, copy fresh li_at and JSESSIONID values into your .env file or environment variables, and restart.';
+    this.manualAction = manualAction;
   }
 
   public toResponse(): ApiErrorResponse {
@@ -23,12 +39,170 @@ export class SessionAuthError extends Error {
   }
 }
 
-export function isSessionConfigured(): boolean {
-  return Boolean(config.liAtCookie && config.liAtCookie.length > 10);
+/**
+ * Validates that LI_AT_COOKIE is present and non-trivial.
+ * Hard rule: Never falls back to any automated login attempt.
+ */
+export function assertSessionConfigured(): void {
+  if (!config.liAtCookie || config.liAtCookie.trim().length < 10) {
+    throw new SessionAuthError(
+      'Missing or invalid LI_AT_COOKIE environment variable. Automatic login is prohibited by policy.',
+      '1. Open linkedin.com in your browser and ensure you are logged in.\n' +
+      '2. Open DevTools (F12) -> Application -> Storage -> Cookies -> https://www.linkedin.com\n' +
+      '3. Copy the value of "li_at" and paste it into your .env file as LI_AT_COOKIE=your_cookie_here\n' +
+      '4. Copy "JSESSIONID" and paste it as LI_JSESSIONID="ajax:your_jsessionid_here"\n' +
+      '5. Restart the server.'
+    );
+  }
 }
 
-export function assertSessionConfigured(): void {
-  if (!isSessionConfigured()) {
-    throw new SessionAuthError('LI_AT_COOKIE is not configured or is too short. Manual session cookie injection is required.');
+export function isSessionConfigured(): boolean {
+  return Boolean(config.liAtCookie && config.liAtCookie.trim().length >= 10);
+}
+
+/**
+ * Builds HTTP headers mimicking a standard logged-in browser session for Voyager API calls.
+ */
+export function getVoyagerHeaders(): Record<string, string> {
+  assertSessionConfigured();
+
+  const jsessionId = config.liJsessionId ? config.liJsessionId.replace(/^"|"$/g, '') : '';
+  const cookieHeader = jsessionId
+    ? `li_at=${config.liAtCookie}; JSESSIONID="${jsessionId}"`
+    : `li_at=${config.liAtCookie}`;
+
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    'Accept': 'application/vnd.linkedin.normalized+json+2.1',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cookie': cookieHeader,
+    'x-li-lang': 'en_US',
+    'x-restli-protocol-version': '2.0.0'
+  };
+
+  if (jsessionId) {
+    headers['csrf-token'] = jsessionId;
   }
+
+  return headers;
+}
+
+/**
+ * Creates an authenticated Axios HTTP client pre-configured with the session cookie & CSRF headers.
+ */
+export function createAuthenticatedHttpClient(): AxiosInstance {
+  const headers = getVoyagerHeaders();
+
+  const client = axios.create({
+    baseURL: 'https://www.linkedin.com',
+    timeout: 15000,
+    headers,
+    validateStatus: (status) => status < 500 // Don't throw immediately on 401/404 so we can inspect and format clean errors
+  });
+
+  return client;
+}
+
+/**
+ * Injects session cookies into a Playwright browser context.
+ * Hard rule: Never navigates to /login or submits credentials.
+ */
+export async function injectCookiesIntoBrowserContext(context: BrowserContext): Promise<void> {
+  assertSessionConfigured();
+
+  const jsessionId = config.liJsessionId ? config.liJsessionId.replace(/^"|"$/g, '') : '';
+  const cookies = [
+    {
+      name: 'li_at',
+      value: config.liAtCookie,
+      domain: '.linkedin.com',
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'None' as const
+    }
+  ];
+
+  if (jsessionId) {
+    cookies.push({
+      name: 'JSESSIONID',
+      value: `"${jsessionId}"`,
+      domain: '.linkedin.com',
+      path: '/',
+      httpOnly: false,
+      secure: true,
+      sameSite: 'None' as const
+    });
+  }
+
+  await context.addCookies(cookies);
+}
+
+/**
+ * Lightweight startup validation call:
+ * Checks if the session cookie is valid without triggering expensive scraper routines.
+ * If expired/invalid, fails fast and returns descriptive manual action instructions.
+ * Hard rule: NO automated retry or relogin logic.
+ */
+export async function validateSessionCookie(httpClient?: AxiosInstance): Promise<AuthValidationResult> {
+  if (!isSessionConfigured()) {
+    return {
+      valid: false,
+      error: 'LI_AT_COOKIE is not configured. Please set LI_AT_COOKIE in .env.'
+    };
+  }
+
+  const client = httpClient || createAuthenticatedHttpClient();
+
+  try {
+    // Lightweight Voyager endpoint to test authentication status
+    const response = await client.get('/voyager/api/me', {
+      headers: {
+        'Accept': 'application/vnd.linkedin.normalized+json+2.1'
+      }
+    });
+
+    if (response.status === 200) {
+      const data = response.data;
+      const miniProfile = data?.included?.find((item: any) => item.$type?.includes('MiniProfile')) || data?.data;
+      const name = miniProfile ? `${miniProfile.firstName || ''} ${miniProfile.lastName || ''}`.trim() : null;
+      return {
+        valid: true,
+        username: name || 'Authenticated User'
+      };
+    }
+
+    if (response.status === 401 || response.status === 403 || response.status === 302) {
+      return {
+        valid: false,
+        error: 'LinkedIn session cookie is expired or invalid (HTTP ' + response.status + ').'
+      };
+    }
+
+    // If endpoint is not found or non-200, return status code info
+    return {
+      valid: false,
+      error: `Unexpected response status from LinkedIn auth check: HTTP ${response.status}`
+    };
+  } catch (err: any) {
+    return {
+      valid: false,
+      error: `Auth validation network error: ${err?.message || 'Unknown network error'}`
+    };
+  }
+}
+
+/**
+ * Returns the authenticated execution context.
+ * Throws SessionAuthError on failure.
+ */
+export function getAuthenticatedContext(): AuthenticatedHttpClients {
+  assertSessionConfigured();
+  const headers = getVoyagerHeaders();
+  const axiosInstance = createAuthenticatedHttpClient();
+
+  return {
+    axiosInstance,
+    headers
+  };
 }
