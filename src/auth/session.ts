@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import { BrowserContext } from 'playwright';
 import { config } from '../config.js';
 import { ApiErrorResponse } from '../types/index.js';
 
@@ -62,8 +61,9 @@ export function isSessionConfigured(): boolean {
 
 /**
  * Builds HTTP headers mimicking a standard logged-in browser session for Voyager API calls.
+ * Reads LI_AT_COOKIE and LI_JSESSIONID from configuration.
  */
-export function getVoyagerHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
   assertSessionConfigured();
 
   const jsessionId = config.liJsessionId ? config.liJsessionId.replace(/^"|"$/g, '') : '';
@@ -87,11 +87,14 @@ export function getVoyagerHeaders(): Record<string, string> {
   return headers;
 }
 
+// Alias for backwards compatibility
+export const getVoyagerHeaders = getAuthHeaders;
+
 /**
  * Creates an authenticated Axios HTTP client pre-configured with the session cookie & CSRF headers.
  */
 export function createAuthenticatedHttpClient(): AxiosInstance {
-  const headers = getVoyagerHeaders();
+  const headers = getAuthHeaders();
 
   const client = axios.create({
     baseURL: 'https://www.linkedin.com',
@@ -101,41 +104,6 @@ export function createAuthenticatedHttpClient(): AxiosInstance {
   });
 
   return client;
-}
-
-/**
- * Injects session cookies into a Playwright browser context.
- * Hard rule: Never navigates to /login or submits credentials.
- */
-export async function injectCookiesIntoBrowserContext(context: BrowserContext): Promise<void> {
-  assertSessionConfigured();
-
-  const jsessionId = config.liJsessionId ? config.liJsessionId.replace(/^"|"$/g, '') : '';
-  const cookies = [
-    {
-      name: 'li_at',
-      value: config.liAtCookie,
-      domain: '.linkedin.com',
-      path: '/',
-      httpOnly: true,
-      secure: true,
-      sameSite: 'None' as const
-    }
-  ];
-
-  if (jsessionId) {
-    cookies.push({
-      name: 'JSESSIONID',
-      value: `"${jsessionId}"`,
-      domain: '.linkedin.com',
-      path: '/',
-      httpOnly: false,
-      secure: true,
-      sameSite: 'None' as const
-    });
-  }
-
-  await context.addCookies(cookies);
 }
 
 /**

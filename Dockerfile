@@ -1,5 +1,6 @@
 # ==============================================================================
-# LinkSight Dockerfile (Production Ready with Playwright System Dependencies)
+# LinkSight Dockerfile (Lightweight Production Node.js Image)
+# Pure HTTP Reverse-Engineered Voyager Client - Zero Browser Dependencies
 # ==============================================================================
 
 # Build Stage
@@ -10,7 +11,7 @@ WORKDIR /app
 # Copy dependency definitions
 COPY package*.json tsconfig.json ./
 
-# Install dependencies (including devDependencies for build)
+# Install all dependencies for build
 RUN npm ci
 
 # Copy source code
@@ -19,8 +20,8 @@ COPY src/ ./src/
 # Compile TypeScript to dist/
 RUN npm run build
 
-# Production Stage with Playwright dependencies pre-installed
-FROM mcr.microsoft.com/playwright:v1.50.1-noble AS runner
+# Production Stage
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
@@ -28,15 +29,12 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
-# Copy package definitions and install production only dependencies
+# Copy package definitions and install production-only dependencies
 COPY package*.json ./
 RUN npm ci --omit=dev
 
 # Copy compiled JavaScript from builder stage
 COPY --from=builder /app/dist ./dist
-
-# Install Chromium browser binary for Playwright fallback mode
-RUN npx playwright install chromium
 
 # Expose API port
 EXPOSE 3000

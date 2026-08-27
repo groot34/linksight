@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   assertSessionConfigured,
   isSessionConfigured,
+  getAuthHeaders,
   getVoyagerHeaders,
   validateSessionCookie,
   SessionAuthError
@@ -28,18 +29,20 @@ describe('Auth & Session Module', () => {
     config.liAtCookie = original;
   });
 
-  it('getVoyagerHeaders attaches li_at and csrf-token correctly', () => {
+  it('getAuthHeaders attaches li_at and csrf-token correctly', () => {
     const origCookie = config.liAtCookie;
     const origJsession = config.liJsessionId;
 
     config.liAtCookie = 'AQEDAQ_test_li_at_cookie_value_12345';
     config.liJsessionId = 'ajax:987654321';
 
-    const headers = getVoyagerHeaders();
+    const headers = getAuthHeaders();
 
     expect(headers['Cookie']).toContain('li_at=AQEDAQ_test_li_at_cookie_value_12345');
     expect(headers['Cookie']).toContain('JSESSIONID="ajax:987654321"');
     expect(headers['csrf-token']).toBe('ajax:987654321');
+    expect(headers['x-restli-protocol-version']).toBe('2.0.0');
+    expect(headers['x-li-lang']).toBe('en_US');
     expect(headers['Accept']).toBe('application/vnd.linkedin.normalized+json+2.1');
 
     config.liAtCookie = origCookie;

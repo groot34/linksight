@@ -8,7 +8,6 @@ export interface AppConfig {
   dailyRequestCap: number;
   requestCooldownSeconds: number;
   cacheTtlHours: number;
-  scraperEngine: 'voyager' | 'playwright';
 }
 
 export interface ExperienceItem {
@@ -63,7 +62,6 @@ export interface ProfileMeta {
   fetched_at: string;
   execution_time_ms: number;
   daily_requests_remaining: number;
-  engine: 'voyager' | 'playwright';
 }
 
 export interface ProfileResponse {

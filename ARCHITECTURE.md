@@ -6,31 +6,29 @@
 
 ---
 
-## 1. Scraping & Data Ingestion Approach
+## 1. Scraping & Reverse-Engineered Ingestion Approach
 
-We evaluated two potential approaches for extracting public LinkedIn profile data given LinkedIn's lack of an open public profile API:
+LinkedIn's public API does not expose full profile data (work experience, education, skills, certifications, about summary) without enterprise partner approval. Browser-based scraping (Playwright/Puppeteer) is explicitly prohibited due to high overhead, brittle DOM selectors, and aggressive bot detection.
 
-| Dimension | Option A: Direct HTTP (Voyager API) **[RECOMMENDED PRIMARY]** | Option B: Headless Browser (Playwright / Chromium) **[DOCUMENTED FALLBACK]** |
-| :--- | :--- | :--- |
-| **Mechanism** | Sends direct HTTPS calls to LinkedIn internal Voyager endpoints (`/voyager/api/identity/dash/profiles` or `/voyager/api/identity/profiles/{vanity}`) with `li_at` and `csrf-token: {JSESSIONID}` headers. | Spins up headless Chromium, injects `li_at` & `JSESSIONID` into browser storage/cookies, navigates to `https://linkedin.com/in/{vanity}`, and parses DOM. |
-| **Footprint & Speed** | **Extremely lightweight (~100–300ms)**. Single JSON request/response cycle. Zero DOM rendering or image downloading. | **Heavy (~3–8s per profile)**. High CPU and memory overhead (~300MB–1GB RAM per Chromium instance). |
-| **Data Fidelity** | **Structured JSON natively returned by LinkedIn**. Exact typed strings for experience, education, skills, certifications, and high-resolution image artifact URLs. | Relies on brittle CSS selectors/XPath that break whenever LinkedIn updates frontend classes or DOM structures. |
-| **Detection Profile** | Mimics standard LinkedIn web SPA data fetching. Very low request volume footprint (1 request per profile). | Browser fingerprinting risks (WebDriver flags, canvas/WebGL fingerprinting, aggressive client-side bot detection scripts). |
-| **Hosting Requirements** | Runs anywhere (Render, Railway, Fly.io, standard small container or VPS) on minimal resources (128MB–256MB RAM). | Requires large Docker images with Chromium dependencies, fonts, and substantial RAM/CPU allocation. Incompatible with standard lightweight hosting. |
+LinkSight employs a **Pure HTTP Reverse-Engineering Approach**:
+- Mimics the internal network requests made by LinkedIn's single-page web application (Voyager API / GraphQL endpoints).
+- Executes lightweight HTTPS requests (`/voyager/api/identity/dash/profiles`, `/voyager/api/identity/profiles/{vanity}`, `/voyager/api/graphql`) directly via HTTP client (`axios`/`undici`).
+- Injects session authentication headers (`Cookie: li_at=...; JSESSIONID="..."`, `csrf-token: ...`, `x-restli-protocol-version: 2.0.0`, `x-li-lang: en_US`).
+- Natively receives structured JSON directly from LinkedIn backend and maps it to a unified, strongly-typed profile schema.
 
-### Decision
-- **Primary Approach**: **Direct HTTP to LinkedIn Voyager API** using `undici` / `axios` with browser-accurate HTTP headers.
-- **Fallback Strategy**: Headless Playwright automation architecture documented in `README.md` as an alternative if LinkedIn rotates internal Voyager endpoint signatures.
+> [!WARNING]
+> **Internal & Undocumented Endpoints Notice**: The LinkedIn Voyager and Dash API endpoints used by this service are internal, undocumented, and unofficial. LinkedIn may change payload structures, endpoint paths, or headers without notice. LinkSight abstracts these schemas behind a resilient parser layer with multiple fallback paths for common schema variations.
 
 ---
 
 ## 2. Runtime & Web Framework
 
-- **Runtime**: **Node.js (v20+ / v24) with TypeScript**
+- **Runtime**: **Node.js (v20+ / v22) with TypeScript**
 - **Web Framework**: **Fastify**
-  - High performance, low overhead, native JSON schema validation, and first-class async request lifecycle support.
-  - Automatic OpenAPI / Swagger generation via `@fastify/swagger` and `@fastify/swagger-ui` for seamless interactive reviewer testing at `/docs`.
-  - Strict input/output validation with JSON Schema / TypeBox / Zod.
+  - Ultra-high throughput and minimal memory footprint (~30-50MB RAM).
+  - Native JSON Schema validation and serialization.
+  - Automatic OpenAPI / Swagger UI generation at `/docs`.
+  - Zero browser dependencies, zero headless Chromium packages, and zero binary bloat.
 
 ---
 
@@ -78,10 +76,21 @@ Because this is a demo take-home API, safety guardrails are enforced in code to 
 ---
 
 ## 5. Deployment & Hosting Strategy
+ 
+Because the service uses pure HTTP requests and requires zero headless browser binaries or Chromium processes, resource utilization is minimal (<50MB RAM, instant cold start).
+ 
+### Platform Comparison & Recommendation:
+- **Render / Railway / Fly.io (Recommended)**:
+  - Standard lightweight web service container.
+  - Native support for persistent environment variables (`LI_AT_COOKIE`, `LI_JSESSIONID`).
+  - Automatic HTTPS and continuous deployment from GitHub.
+  - Generous free/low-cost tiers sufficient for take-home assignment demonstration.
+- **Serverless (Vercel / Netlify / AWS Lambda)**:
+  - Fully compatible since execution times for direct Voyager HTTP requests are ~150–350ms (well under serverless timeouts).
+  - Note: Serverless environments may spin up fresh container instances across different edge IPs; hosting on a fixed container (Render/Railway) reduces IP volatility against LinkedIn's session cookie.
 
-- **Target Platforms**: **Render / Railway / Fly.io / Docker**.
-- **Containerization**: Multi-stage `Dockerfile` producing a lean, production-ready Alpine/Debian Node image (~120MB).
-- **Environment Isolation**: All configuration passed via strict environment variables validated at startup. `.env` is ignored via `.gitignore`, and a clean `.env.example` is provided for reviewers.
+- **Containerization**: Multi-stage `Dockerfile` producing a lean Node 22 slim image (<120MB).
+- **Environment Isolation**: All configuration passed via strict environment variables. `.env` is git-ignored, and `.env.example` provides placeholder documentation.
 
 ---
 

@@ -13,8 +13,7 @@ const envSchema = z.object({
   LI_JSESSIONID: z.string().default(''),
   DAILY_REQUEST_CAP: z.string().default('20').transform((val) => parseInt(val, 10)),
   REQUEST_COOLDOWN_SECONDS: z.string().default('7').transform((val) => parseInt(val, 10)),
-  CACHE_TTL_HOURS: z.string().default('24').transform((val) => parseInt(val, 10)),
-  SCRAPER_ENGINE: z.enum(['voyager', 'playwright']).default('voyager')
+  CACHE_TTL_HOURS: z.string().default('24').transform((val) => parseInt(val, 10))
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -33,6 +32,5 @@ export const config: AppConfig = {
   liJsessionId: parsedEnv.data.LI_JSESSIONID.trim().replace(/^"|"$/g, ''), // Strip wrapping quotes if copied from devtools
   dailyRequestCap: parsedEnv.data.DAILY_REQUEST_CAP,
   requestCooldownSeconds: parsedEnv.data.REQUEST_COOLDOWN_SECONDS,
-  cacheTtlHours: parsedEnv.data.CACHE_TTL_HOURS,
-  scraperEngine: parsedEnv.data.SCRAPER_ENGINE
+  cacheTtlHours: parsedEnv.data.CACHE_TTL_HOURS
 };
