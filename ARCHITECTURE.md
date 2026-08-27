@@ -96,44 +96,53 @@ Because the service uses pure HTTP requests and requires zero headless browser b
 
 ## 6. Target Output Schema
 
-The API normalizes LinkedIn Voyager payload into a clean, intuitive, and strongly typed JSON structure:
+The API normalizes the LinkedIn Voyager payload into a clean, intuitive, strongly-typed JSON structure matching the Phase 4 specification:
 
 ```json
 {
   "success": true,
   "data": {
-    "vanity_name": "williamhgates",
-    "full_name": "Bill Gates",
-    "first_name": "Bill",
-    "last_name": "Gates",
+    "profileUrl": "https://www.linkedin.com/in/williamhgates",
+    "name": "Bill Gates",
     "headline": "Co-chair, Bill & Melinda Gates Foundation",
     "location": "Seattle, Washington, United States",
     "about": "Co-chair of the Bill & Melinda Gates Foundation...",
-    "profile_picture_url": "https://media.licdn.com/dms/image/...",
-    "background_image_url": "https://media.licdn.com/dms/image/...",
+    "profileImageUrl": "https://media.licdn.com/dms/image/...",
+    "bannerImageUrl": "https://media.licdn.com/dms/image/...",
     "experience": [
       {
         "title": "Co-chair",
-        "company_name": "Bill & Melinda Gates Foundation",
+        "company": "Bill & Melinda Gates Foundation",
         "location": "Seattle, WA",
-        "starts_at": "2000-01-01",
-        "ends_at": null,
-        "is_current": true,
+        "startDate": "2000-01",
+        "endDate": null,
         "description": "..."
       }
     ],
     "education": [
       {
-        "school_name": "Harvard University",
-        "degree_name": "Doctor of Laws",
-        "field_of_study": "Honorary",
-        "starts_at": "1973",
-        "ends_at": "1975"
+        "school": "Harvard University",
+        "degree": "Doctor of Laws",
+        "field": "Honorary",
+        "startDate": "1973",
+        "endDate": "1975"
       }
     ],
     "skills": ["Software Development", "Philanthropy", "Global Health"],
-    "certifications": [],
-    "languages": ["English"]
+    "certifications": [
+      {
+        "name": "Certified Humanitarian",
+        "issuer": "Global Trust",
+        "issueDate": "2010"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "proficiency": "Native or bilingual"
+      }
+    ],
+    "scrapedAt": "2026-08-27T12:00:00.000Z"
   },
   "meta": {
     "cached": false,

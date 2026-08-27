@@ -30,8 +30,8 @@ describe('Scraper Module (fetchProfile)', () => {
       skipThrottling: true
     });
 
-    expect(profile.vanity_name).toBe('satyanadella');
-    expect(profile.full_name).toBe('Satya Nadella');
+    expect(profile.profileUrl).toBe('https://www.linkedin.com/in/satyanadella');
+    expect(profile.name).toBe('Satya Nadella');
     expect(profile.headline).toBe('Chairman and CEO at Microsoft');
     expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
 
@@ -40,7 +40,7 @@ describe('Scraper Module (fetchProfile)', () => {
       httpClient: mockHttpClient,
       skipThrottling: true
     });
-    expect(cachedProfile.full_name).toBe('Satya Nadella');
+    expect(cachedProfile.name).toBe('Satya Nadella');
     expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
   });
 
@@ -55,7 +55,7 @@ describe('Scraper Module (fetchProfile)', () => {
     await expect(
       fetchProfile('https://www.linkedin.com/in/williamhgates', {
         httpClient: mockHttpClient,
-      skipThrottling: true
+        skipThrottling: true
       })
     ).rejects.toThrow(SessionAuthError);
   });
@@ -71,7 +71,7 @@ describe('Scraper Module (fetchProfile)', () => {
     await expect(
       fetchProfile('https://www.linkedin.com/in/nonexistentuser999888777', {
         httpClient: mockHttpClient,
-      skipThrottling: true
+        skipThrottling: true
       })
     ).rejects.toThrow(ProfileNotFoundError);
   });

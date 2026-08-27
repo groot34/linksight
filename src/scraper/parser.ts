@@ -1,8 +1,9 @@
 import {
-  ProfileData,
+  LinkedInProfile,
   ExperienceItem,
   EducationItem,
-  CertificationItem
+  CertificationItem,
+  LanguageItem
 } from '../types/index.js';
 
 /**
@@ -57,10 +58,10 @@ export function formatLinkedInDate(dateObj: any): string | null {
 }
 
 /**
- * Parses Voyager identity response / Dash full profile payload into our normalized ProfileData schema.
+ * Parses Voyager identity response / Dash full profile payload into our normalized LinkedInProfile schema.
  * Each section is wrapped in isolated try/catch blocks to degrade gracefully on missing or malformed sections.
  */
-export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
+export function parseVoyagerProfile(vanityName: string, raw: any): LinkedInProfile {
   if (!raw) {
     throw new Error('EMPTY_PAYLOAD: Received empty response from LinkedIn Voyager API.');
   }
@@ -105,17 +106,17 @@ export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
   }
 
   // 3. Extract Profile & Background Images
-  let profilePictureUrl: string | null = null;
-  let backgroundImageUrl: string | null = null;
+  let profileImageUrl: string | null = null;
+  let bannerImageUrl: string | null = null;
 
   try {
-    profilePictureUrl =
+    profileImageUrl =
       resolveVectorImage(profileEntity?.picture) ||
       resolveVectorImage(profileEntity?.profilePicture?.displayImageReference?.vectorImage) ||
       resolveVectorImage(profileEntity?.displayPictureUrl) ||
       null;
 
-    backgroundImageUrl =
+    bannerImageUrl =
       resolveVectorImage(profileEntity?.backgroundImage) ||
       resolveVectorImage(profileEntity?.backgroundPicture?.displayImageReference?.vectorImage) ||
       resolveVectorImage(profileEntity?.backgroundPictureUrl) ||
@@ -139,18 +140,15 @@ export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
     for (const pos of rawPositions) {
       try {
         const timePeriod = pos.timePeriod || {};
-        const startsAt = formatLinkedInDate(timePeriod.startDate);
-        const endsAt = formatLinkedInDate(timePeriod.endDate);
-        const isCurrent = !endsAt || pos.isCurrent === true;
+        const startDate = formatLinkedInDate(timePeriod.startDate);
+        const endDate = formatLinkedInDate(timePeriod.endDate);
 
         experience.push({
           title: pos.title || 'Unknown Position',
-          company_name: pos.companyName || pos.company?.name || 'Unknown Company',
-          company_url: pos.companyUrn ? `https://www.linkedin.com/company/${pos.companyUrn.split(':').pop()}` : null,
+          company: pos.companyName || pos.company?.name || 'Unknown Company',
           location: pos.locationName || pos.location || null,
-          starts_at: startsAt,
-          ends_at: endsAt,
-          is_current: isCurrent,
+          startDate,
+          endDate,
           description: pos.description || null
         });
       } catch {
@@ -177,12 +175,11 @@ export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
       try {
         const timePeriod = edu.timePeriod || {};
         education.push({
-          school_name: edu.schoolName || edu.school?.name || 'Unknown School',
-          degree_name: edu.degreeName || null,
-          field_of_study: edu.fieldOfStudy || null,
-          starts_at: formatLinkedInDate(timePeriod.startDate),
-          ends_at: formatLinkedInDate(timePeriod.endDate),
-          description: edu.description || edu.activities || null
+          school: edu.schoolName || edu.school?.name || 'Unknown School',
+          degree: edu.degreeName || null,
+          field: edu.fieldOfStudy || null,
+          startDate: formatLinkedInDate(timePeriod.startDate),
+          endDate: formatLinkedInDate(timePeriod.endDate)
         });
       } catch {
         // Skip malformed individual education item
@@ -234,11 +231,8 @@ export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
       try {
         certifications.push({
           name: cert.name || 'Unnamed Certification',
-          authority: cert.authority || cert.company?.name || null,
-          url: cert.url || null,
-          starts_at: formatLinkedInDate(cert.timePeriod?.startDate),
-          ends_at: formatLinkedInDate(cert.timePeriod?.endDate),
-          license_number: cert.licenseNumber || null
+          issuer: cert.authority || cert.company?.name || null,
+          issueDate: formatLinkedInDate(cert.timePeriod?.startDate)
         });
       } catch {
         // Skip malformed certification item
@@ -249,7 +243,7 @@ export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
   }
 
   // 8. Extract Languages
-  const languagesSet = new Set<string>();
+  const languages: LanguageItem[] = [];
   try {
     const langEntities = included.filter((item: any) =>
       item.$type?.includes('identity.profile.Language') ||
@@ -262,32 +256,34 @@ export function parseVoyagerProfile(vanityName: string, raw: any): ProfileData {
 
     for (const lang of rawLangs) {
       try {
-        const name = lang.name || lang.language;
-        if (name && typeof name === 'string') {
-          languagesSet.add(name.trim());
+        const languageName = lang.name || lang.language;
+        if (languageName && typeof languageName === 'string') {
+          languages.push({
+            language: languageName.trim(),
+            proficiency: lang.proficiency || lang.proficiencyName || null
+          });
         }
       } catch {
         // Skip malformed language item
       }
     }
   } catch {
-    // Languages degrades to empty set
+    // Languages degrades to empty list
   }
 
   return {
-    vanity_name: vanityName,
-    full_name: fullName,
-    first_name: firstName,
-    last_name: lastName,
+    profileUrl: `https://www.linkedin.com/in/${vanityName}`,
+    name: fullName,
     headline,
     location,
     about,
-    profile_picture_url: profilePictureUrl,
-    background_image_url: backgroundImageUrl,
+    profileImageUrl,
+    bannerImageUrl,
     experience,
     education,
     skills: Array.from(skillsSet),
     certifications,
-    languages: Array.from(languagesSet)
+    languages,
+    scrapedAt: new Date().toISOString()
   };
 }

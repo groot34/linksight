@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseVoyagerProfile, resolveVectorImage, formatLinkedInDate } from './parser.js';
+import { linkedInProfileSchema } from '../types/index.js';
 
-describe('Voyager Parser', () => {
+describe('Voyager Parser & Phase 4 Schema', () => {
   it('resolves VectorImage correctly', () => {
     const vectorImage = {
       rootUrl: 'https://media.licdn.com/dms/image/v2/D5603AQ/',
@@ -23,7 +24,7 @@ describe('Voyager Parser', () => {
     expect(formatLinkedInDate(null)).toBeNull();
   });
 
-  it('parses full Voyager payload with all sections into clean ProfileData', () => {
+  it('parses full Voyager payload into exact Phase 4 schema format and validates with Zod', () => {
     const mockPayload = {
       data: {},
       included: [
@@ -74,31 +75,37 @@ describe('Voyager Parser', () => {
         },
         {
           $type: 'com.linkedin.voyager.dash.identity.profile.Language',
-          name: 'English'
+          name: 'English',
+          proficiency: 'Native or bilingual'
         }
       ]
     };
 
     const parsed = parseVoyagerProfile('williamhgates', mockPayload);
 
-    expect(parsed.vanity_name).toBe('williamhgates');
-    expect(parsed.full_name).toBe('Bill Gates');
-    expect(parsed.first_name).toBe('Bill');
-    expect(parsed.last_name).toBe('Gates');
+    // Validate with Zod schema
+    const validation = linkedInProfileSchema.safeParse(parsed);
+    expect(validation.success).toBe(true);
+
+    expect(parsed.profileUrl).toBe('https://www.linkedin.com/in/williamhgates');
+    expect(parsed.name).toBe('Bill Gates');
     expect(parsed.headline).toBe('Co-chair, Bill & Melinda Gates Foundation');
     expect(parsed.location).toBe('Seattle, Washington, United States');
-    expect(parsed.profile_picture_url).toBe('https://media.licdn.com/dms/image/test/bill_800.jpg');
+    expect(parsed.profileImageUrl).toBe('https://media.licdn.com/dms/image/test/bill_800.jpg');
 
     expect(parsed.experience.length).toBe(1);
-    expect(parsed.experience[0]?.company_name).toBe('Bill & Melinda Gates Foundation');
-    expect(parsed.experience[0]?.is_current).toBe(true);
+    expect(parsed.experience[0]?.company).toBe('Bill & Melinda Gates Foundation');
+    expect(parsed.experience[0]?.startDate).toBe('2000-01');
 
     expect(parsed.education.length).toBe(1);
-    expect(parsed.education[0]?.school_name).toBe('Harvard University');
+    expect(parsed.education[0]?.school).toBe('Harvard University');
 
     expect(parsed.skills).toContain('Software Development');
     expect(parsed.certifications[0]?.name).toBe('Certified Humanitarian');
-    expect(parsed.languages).toContain('English');
+    expect(parsed.certifications[0]?.issuer).toBe('Global Trust');
+    expect(parsed.languages[0]?.language).toBe('English');
+    expect(parsed.languages[0]?.proficiency).toBe('Native or bilingual');
+    expect(parsed.scrapedAt).toBeDefined();
   });
 
   it('degrades gracefully when sections are empty or omitted', () => {
@@ -112,12 +119,13 @@ describe('Voyager Parser', () => {
 
     const parsed = parseVoyagerProfile('janedoe', minimalPayload);
 
-    expect(parsed.vanity_name).toBe('janedoe');
-    expect(parsed.full_name).toBe('Jane Doe');
+    expect(parsed.profileUrl).toBe('https://www.linkedin.com/in/janedoe');
+    expect(parsed.name).toBe('Jane Doe');
     expect(parsed.experience).toEqual([]);
     expect(parsed.education).toEqual([]);
     expect(parsed.skills).toEqual([]);
     expect(parsed.certifications).toEqual([]);
     expect(parsed.languages).toEqual([]);
+    expect(parsed.scrapedAt).toBeDefined();
   });
 });
