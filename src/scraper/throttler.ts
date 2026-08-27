@@ -68,7 +68,9 @@ export class RequestThrottler {
 
   private async executeThrottledRequest(resolve: () => void): Promise<void> {
     const now = Date.now();
-    const minDelayMs = config.requestCooldownSeconds * 1000;
+    // Add randomized jitter (e.g. 1000ms - 3000ms) to reduce bot-detection patterns
+    const jitterMs = Math.floor(Math.random() * 2500) + 750;
+    const minDelayMs = config.requestCooldownSeconds * 1000 + jitterMs;
     const timeSinceLast = now - this.lastRequestTimestamp;
 
     if (this.lastRequestTimestamp > 0 && timeSinceLast < minDelayMs) {

@@ -37,6 +37,23 @@ Instead, authentication operates via **session injection** using your browser's 
 
 ---
 
+## 🛡️ Rate Limiting & Safety Guardrails
+
+To protect accounts during demonstrations, LinkSight strictly enforces safety guardrails directly at the outbound request layer:
+
+1. **Idempotent In-Memory Caching (24h TTL)**:
+   - Repeated requests for the same profile URL return instantly from memory with `meta.cached: true` without dispatching live requests to LinkedIn.
+2. **Outbound Inter-Request Mutex Throttler**:
+   - Live requests are queued and throttled with a mandatory **5–10 second cooldown delay** plus randomized jitter.
+3. **Randomized Delay / Jitter**:
+   - Adds randomized intervals (750ms–3250ms) between outbound requests to avoid uniform machine timing patterns.
+   > [!NOTE]
+   > **Bot-Detection Notice**: Randomized timing and request throttling are best-effort mitigations to reduce automated footprint; they do not provide an absolute guarantee against detection or rate limiting.
+4. **Hard Daily Request Cap**:
+   - Enforced in code via `DAILY_REQUEST_CAP` (default: 20/day). If the cap is reached, further live requests return `429 Too Many Requests` until the quota resets at midnight UTC.
+
+---
+
 ## ⚡ Quick Start
 
 ### 1. Install Dependencies

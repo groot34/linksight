@@ -56,6 +56,8 @@ export interface ProfileData {
   languages: string[];
 }
 
+export type LinkedInProfile = ProfileData;
+
 export interface ProfileMeta {
   cached: boolean;
   cached_at?: string | null;
