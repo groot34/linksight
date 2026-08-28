@@ -22,8 +22,9 @@ async function start() {
       console.warn(`⚠️  [AUTH NOTICE] No LI_AT_COOKIE detected in environment.`);
       console.warn(`   Live profile lookups will return 401 Unauthorized until configured.`);
       console.warn(`   Please copy "li_at" and "JSESSIONID" from browser DevTools into .env.\n`);
-    } else {
-      console.log(`🔍 [AUTH CHECK] Validating configured session cookie with LinkedIn...`);
+    } else if (process.env.VALIDATE_AUTH_ON_START === 'true') {
+      // Only hits LinkedIn if explicitly opted-in — costs one real request.
+      console.log(`🔍 [AUTH CHECK] Validating session cookie with LinkedIn (VALIDATE_AUTH_ON_START=true)...`);
       const validation = await validateSessionCookie();
       if (validation.valid) {
         console.log(`✅ [AUTH SUCCESS] Logged in as: "${validation.username}". Session cookie is active and valid.\n`);
@@ -32,6 +33,9 @@ async function start() {
         console.error(`👉 Manual action required: Re-copy fresh "li_at" and "JSESSIONID" from your browser and update .env.`);
         console.error(`   (Note: Per safety policy, automated relogin is strictly disabled).\n`);
       }
+    } else {
+      console.log(`✅ [AUTH READY] LI_AT_COOKIE is configured. Startup auth check skipped (safe default).`);
+      console.log(`   Set VALIDATE_AUTH_ON_START=true in .env to explicitly verify the cookie on startup.\n`);
     }
   } catch (err) {
     console.error('❌ Fatal error starting server:', err);

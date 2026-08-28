@@ -100,7 +100,8 @@ export function createAuthenticatedHttpClient(): AxiosInstance {
     baseURL: 'https://www.linkedin.com',
     timeout: 15000,
     headers,
-    validateStatus: (status) => status < 500 // Don't throw immediately on 401/404 so we can inspect and format clean errors
+    maxRedirects: 0, // CRITICAL: LinkedIn 302s mean "session invalid" — never follow them
+    validateStatus: (status) => status < 500 || status === 500 // handle 500 gracefully too
   });
 
   return client;

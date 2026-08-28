@@ -67,37 +67,33 @@ export async function fetchProfile(
   const client = options.httpClient || createAuthenticatedHttpClient();
 
   try {
-    // Primary Voyager Dash Full Profile endpoint
-    const endpoint = `/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodeURIComponent(vanityName)}&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-N`;
+    // Primary: stable Voyager identity profile endpoint (no decoration ID — avoids LinkedIn 500s)
+    const primaryEndpoint = `/voyager/api/identity/profiles/${encodeURIComponent(vanityName)}/profileView`;
 
-    const response = await client.get(endpoint, {
+    let response = await client.get(primaryEndpoint, {
       headers: {
         'Accept': 'application/vnd.linkedin.normalized+json+2.1'
       }
     });
 
-    // Handle Auth Failures (401 / 403 / Redirects to authwall or login)
-    if (response.status === 401 || response.status === 403) {
+    // If primary fails, try the dash profiles endpoint as fallback
+    if (response.status === 404 || response.status === 500) {
+      const dashEndpoint = `/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodeURIComponent(vanityName)}&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-65`;
+      response = await client.get(dashEndpoint, {
+        headers: { 'Accept': 'application/vnd.linkedin.normalized+json+2.1' }
+      });
+    }
+
+    // Handle Auth Failures — 401, 403, or 302 redirect all mean "session invalid"
+    // LinkedIn returns 302 → authwall/login when li_at is expired or invalidated
+    if (response.status === 401 || response.status === 403 || response.status === 302) {
       throw new SessionAuthError(
-        `LinkedIn session authentication failed (HTTP ${response.status}). Cookie may be expired.`,
+        `LinkedIn session authentication failed (HTTP ${response.status}). Cookie is expired or was invalidated by LinkedIn.`,
         'Log into linkedin.com in your browser, copy fresh "li_at" and "JSESSIONID" values from DevTools into .env, and restart the server.'
       );
     }
 
     if (response.status === 404) {
-      // Try legacy profileView fallback endpoint before failing
-      try {
-        const fallbackEndpoint = `/voyager/api/identity/profiles/${encodeURIComponent(vanityName)}/profileView`;
-        const fallbackRes = await client.get(fallbackEndpoint);
-        if (fallbackRes.status === 200 && fallbackRes.data) {
-          const parsed = parseVoyagerProfile(vanityName, fallbackRes.data);
-          profileCache.set(vanityName, parsed);
-          return parsed;
-        }
-      } catch {
-        // Fallback also failed
-      }
-
       throw new ProfileNotFoundError(vanityName);
     }
 
