@@ -9,6 +9,7 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.string().default('development'),
   LOG_LEVEL: z.string().default('info'),
+  API_KEY: z.string().default(''),
   LI_AT_COOKIE: z.string().default(''),
   LI_JSESSIONID: z.string().default(''),
   DAILY_REQUEST_CAP: z.string().default('20').transform((val) => parseInt(val, 10)),
@@ -28,6 +29,7 @@ export const config: AppConfig = {
   host: parsedEnv.data.HOST,
   nodeEnv: parsedEnv.data.NODE_ENV,
   logLevel: parsedEnv.data.LOG_LEVEL,
+  apiKey: parsedEnv.data.API_KEY.trim(),
   liAtCookie: parsedEnv.data.LI_AT_COOKIE.trim(),
   liJsessionId: parsedEnv.data.LI_JSESSIONID.trim().replace(/^"|"$/g, ''), // Strip wrapping quotes if copied from devtools
   dailyRequestCap: parsedEnv.data.DAILY_REQUEST_CAP,

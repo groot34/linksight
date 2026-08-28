@@ -19,8 +19,11 @@ describe('URL Helper (extractVanityName)', () => {
     expect(extractVanityName('john-doe-12345')).toBe('john-doe-12345');
   });
 
-  it('throws descriptive error on invalid inputs', () => {
+  it('throws descriptive error on non-LinkedIn domain URLs or invalid inputs', () => {
     expect(() => extractVanityName('')).toThrow('INVALID_URL');
     expect(() => extractVanityName('   ')).toThrow('INVALID_URL');
+    expect(() => extractVanityName('https://google.com/search')).toThrow('INVALID_URL');
+    expect(() => extractVanityName('https://facebook.com/username')).toThrow('INVALID_URL');
+    expect(() => extractVanityName('https://www.linkedin.com/company/microsoft')).toThrow('INVALID_URL');
   });
 });

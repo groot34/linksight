@@ -5,6 +5,7 @@ export interface AppConfig {
   host: string;
   nodeEnv: string;
   logLevel: string;
+  apiKey: string;
   liAtCookie: string;
   liJsessionId: string;
   dailyRequestCap: number;

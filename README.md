@@ -54,6 +54,114 @@ To protect accounts during demonstrations, LinkSight strictly enforces safety gu
 
 ---
 
+## 🔑 Access Control (API Key)
+
+LinkSight supports simple API key access control to prevent the deployed API from being freely spammed across the public internet:
+
+- To enable, set `API_KEY=your_secret_key` in `.env`.
+- Clients include the header: `x-api-key: your_secret_key`.
+- If `API_KEY` is empty or unset in `.env`, the API runs in open mode (recommended for local development).
+
+> [!NOTE]
+> **Access Control Note**: This API key header is provided as basic abuse and exposure control for deployment demonstrations, not an enterprise authentication or security guarantee.
+
+---
+
+## 📡 API Endpoints & Usage
+
+### 1. Extract Profile Data
+`POST /api/profile`
+
+**Request Headers**:
+```http
+Content-Type: application/json
+x-api-key: your_secret_api_key (optional if configured)
+```
+
+**Request Body**:
+```json
+{
+  "profileUrl": "https://www.linkedin.com/in/williamhgates",
+  "skipCache": false
+}
+```
+
+**cURL Example**:
+```bash
+curl -X POST http://localhost:3000/api/profile \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your_secret_api_key" \
+  -d '{"profileUrl": "https://www.linkedin.com/in/williamhgates"}'
+```
+
+**Response (`200 OK`)**:
+```json
+{
+  "success": true,
+  "data": {
+    "profileUrl": "https://www.linkedin.com/in/williamhgates",
+    "name": "Bill Gates",
+    "headline": "Co-chair, Bill & Melinda Gates Foundation",
+    "location": "Seattle, Washington, United States",
+    "about": "Co-chair of the Bill & Melinda Gates Foundation...",
+    "profileImageUrl": "https://media.licdn.com/dms/image/...",
+    "bannerImageUrl": "https://media.licdn.com/dms/image/...",
+    "experience": [
+      {
+        "title": "Co-chair",
+        "company": "Bill & Melinda Gates Foundation",
+        "location": "Seattle, WA",
+        "startDate": "2000-01",
+        "endDate": null,
+        "description": "..."
+      }
+    ],
+    "education": [
+      {
+        "school": "Harvard University",
+        "degree": "Doctor of Laws",
+        "field": "Honorary",
+        "startDate": "1973",
+        "endDate": "1975"
+      }
+    ],
+    "skills": ["Software Development", "Philanthropy", "Global Health"],
+    "certifications": [
+      {
+        "name": "Certified Humanitarian",
+        "issuer": "Global Trust",
+        "issueDate": "2010"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "proficiency": "Native or bilingual"
+      }
+    ],
+    "scrapedAt": "2026-08-27T17:00:00.000Z"
+  },
+  "meta": {
+    "cached": false,
+    "fetched_at": "2026-08-27T17:00:00.000Z",
+    "execution_time_ms": 284,
+    "daily_requests_remaining": 19
+  }
+}
+```
+
+### 2. HTTP Status Code Mapping
+| Status Code | Meaning | Example Scenario |
+| :--- | :--- | :--- |
+| **`200 OK`** | Success | Structured JSON profile data returned (cached or live). |
+| **`400 Bad Request`** | Invalid input | Malformed or non-LinkedIn profile URL. |
+| **`401 Unauthorized`** | Auth issue | `LI_AT_COOKIE` expired or invalid `x-api-key`. |
+| **`404 Not Found`** | Profile missing | LinkedIn vanity slug does not exist or is private. |
+| **`429 Too Many Requests`** | Rate limited | Server rate limit or daily request cap (`20/day`) reached. |
+| **`502 Bad Gateway`** | Upstream failure | LinkedIn network drop or unexpected internal response. |
+
+---
+
 ## ⚡ Quick Start
 
 ### 1. Install Dependencies
