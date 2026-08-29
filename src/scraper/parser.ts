@@ -61,6 +61,18 @@ export function formatLinkedInDate(dateObj: any): string | null {
  * Parses Voyager identity response / Dash full profile payload into our normalized LinkedInProfile schema.
  * Each section is wrapped in isolated try/catch blocks to degrade gracefully on missing or malformed sections.
  */
+
+export function extractString(val: any): string | null {
+  if (!val) return null;
+  if (typeof val === 'string') return val.trim() || null;
+  if (typeof val.text === 'string') return val.text.trim() || null;
+  if (val.localized && typeof val.localized === 'object') {
+    const values = Object.values(val.localized);
+    if (values.length > 0 && typeof values[0] === 'string') return (values[0] as string).trim() || null;
+  }
+  return null;
+}
+
 export function parseVoyagerProfile(vanityName: string, raw: any): LinkedInProfile {
   if (!raw) {
     throw new Error('EMPTY_PAYLOAD: Received empty response from LinkedIn Voyager API.');
