@@ -4,7 +4,7 @@ import { isSessionConfigured, SessionAuthError } from '../auth/session.js';
 import { requestThrottler } from '../scraper/throttler.js';
 import { profileCache } from '../cache/memory-cache.js';
 import { extractVanityName } from '../scraper/url-helper.js';
-import { fetchProfile, ProfileNotFoundError, LinkedInRateLimitError } from '../scraper/fetch-profile.js';
+import { fetchProfile, ProfileNotFoundError, LinkedInRateLimitError, VoyagerGoneError } from '../scraper/fetch-profile.js';
 import { HealthResponse, ProfileResponse, ApiErrorResponse } from '../types/index.js';
 
 interface ProfileRequestBody {
@@ -35,6 +35,129 @@ async function verifyApiKey(request: FastifyRequest, reply: FastifyReply): Promi
       message: 'Invalid or missing x-api-key header. Access to this API is restricted.'
     };
     return reply.code(401).send(errorResponse);
+  }
+}
+
+async function handleProfileLookup(
+  profileUrl: string | undefined,
+  skipCache: boolean | undefined,
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  const startTime = Date.now();
+
+  if (!profileUrl || typeof profileUrl !== 'string' || profileUrl.trim().length === 0) {
+    await reply.code(400).send({
+      statusCode: 400,
+      error: 'Bad Request',
+      code: 'INVALID_URL',
+      message: 'The "profileUrl" field is required and must be a valid LinkedIn profile URL.'
+    });
+    return;
+  }
+
+  let vanityName = '';
+  try {
+    vanityName = extractVanityName(profileUrl);
+  } catch (err: any) {
+    await reply.code(400).send({
+      statusCode: 400,
+      error: 'Bad Request',
+      code: 'INVALID_URL',
+      message: err.message || 'Invalid LinkedIn profile URL provided.'
+    });
+    return;
+  }
+
+  if (!skipCache) {
+    const cached = profileCache.get(vanityName);
+    if (cached) {
+      const quota = requestThrottler.getDailyQuota();
+      const response: ProfileResponse = {
+        success: true,
+        data: cached.data,
+        meta: {
+          cached: true,
+          cached_at: cached.cachedAt,
+          fetched_at: new Date().toISOString(),
+          execution_time_ms: Date.now() - startTime,
+          daily_requests_remaining: quota.remaining
+        }
+      };
+      await reply.code(200).send(response);
+      return;
+    }
+  }
+
+  try {
+    const profileData = await fetchProfile(profileUrl, { skipCache });
+    const quota = requestThrottler.getDailyQuota();
+
+    const response: ProfileResponse = {
+      success: true,
+      data: profileData,
+      meta: {
+        cached: false,
+        fetched_at: new Date().toISOString(),
+        execution_time_ms: Date.now() - startTime,
+        daily_requests_remaining: quota.remaining
+      }
+    };
+
+    await reply.code(200).send(response);
+  } catch (err: any) {
+    if (err instanceof SessionAuthError) {
+      await reply.code(401).send(err.toResponse());
+      return;
+    }
+
+    if (err instanceof ProfileNotFoundError) {
+      await reply.code(404).send({
+        statusCode: 404,
+        error: 'Not Found',
+        code: err.code,
+        message: err.message
+      });
+      return;
+    }
+
+    if (err instanceof VoyagerGoneError) {
+      await reply.code(410).send({
+        statusCode: 410,
+        error: 'Gone',
+        code: err.code,
+        message: err.message
+      });
+      return;
+    }
+
+    if (err instanceof LinkedInRateLimitError || (err.message && err.message.includes('DAILY_CAP_EXCEEDED'))) {
+      await reply.code(429).send({
+        statusCode: 429,
+        error: 'Too Many Requests',
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: err.message || 'Rate limit reached. Please wait for cooldown or daily quota reset.'
+      });
+      return;
+    }
+
+    if (err.message && err.message.includes('INVALID_URL')) {
+      await reply.code(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'INVALID_URL',
+        message: err.message
+      });
+      return;
+    }
+
+    request.log.error(err, 'Upstream LinkedIn scrape failed');
+    await reply.code(502).send({
+      statusCode: 502,
+      error: 'Bad Gateway',
+      code: 'UPSTREAM_SCRAPE_ERROR',
+      message: `Failed to scrape LinkedIn profile: ${err.message || 'Unknown network error'}`
+    });
   }
 }
 
@@ -200,110 +323,8 @@ export const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =>
       }
     },
     async (request, reply) => {
-      const startTime = Date.now();
       const { profileUrl, skipCache } = request.body || {};
-
-      if (!profileUrl || typeof profileUrl !== 'string' || profileUrl.trim().length === 0) {
-        return reply.code(400).send({
-          statusCode: 400,
-          error: 'Bad Request',
-          code: 'INVALID_URL',
-          message: 'The "profileUrl" field is required and must be a valid LinkedIn profile URL.'
-        });
-      }
-
-      // Extract and validate vanity name
-      let vanityName = '';
-      try {
-        vanityName = extractVanityName(profileUrl);
-      } catch (err: any) {
-        return reply.code(400).send({
-          statusCode: 400,
-          error: 'Bad Request',
-          code: 'INVALID_URL',
-          message: err.message || 'Invalid LinkedIn profile URL provided.'
-        });
-      }
-
-      // Check In-Memory Cache
-      if (!skipCache) {
-        const cached = profileCache.get(vanityName);
-        if (cached) {
-          const quota = requestThrottler.getDailyQuota();
-          const response: ProfileResponse = {
-            success: true,
-            data: cached.data,
-            meta: {
-              cached: true,
-              cached_at: cached.cachedAt,
-              fetched_at: new Date().toISOString(),
-              execution_time_ms: Date.now() - startTime,
-              daily_requests_remaining: quota.remaining
-            }
-          };
-          return reply.code(200).send(response);
-        }
-      }
-
-      // Execute Live Fetch
-      try {
-        const profileData = await fetchProfile(profileUrl, { skipCache });
-        const quota = requestThrottler.getDailyQuota();
-
-        const response: ProfileResponse = {
-          success: true,
-          data: profileData,
-          meta: {
-            cached: false,
-            fetched_at: new Date().toISOString(),
-            execution_time_ms: Date.now() - startTime,
-            daily_requests_remaining: quota.remaining
-          }
-        };
-
-        return reply.code(200).send(response);
-      } catch (err: any) {
-        // Map Domain Errors to Specific HTTP Responses
-        if (err instanceof SessionAuthError) {
-          return reply.code(401).send(err.toResponse());
-        }
-
-        if (err instanceof ProfileNotFoundError) {
-          return reply.code(404).send({
-            statusCode: 404,
-            error: 'Not Found',
-            code: err.code,
-            message: err.message
-          });
-        }
-
-        if (err instanceof LinkedInRateLimitError || (err.message && err.message.includes('DAILY_CAP_EXCEEDED'))) {
-          return reply.code(429).send({
-            statusCode: 429,
-            error: 'Too Many Requests',
-            code: 'RATE_LIMIT_EXCEEDED',
-            message: err.message || 'Rate limit reached. Please wait for cooldown or daily quota reset.'
-          });
-        }
-
-        if (err.message && err.message.includes('INVALID_URL')) {
-          return reply.code(400).send({
-            statusCode: 400,
-            error: 'Bad Request',
-            code: 'INVALID_URL',
-            message: err.message
-          });
-        }
-
-        // Catch-all Upstream Failure
-        request.log.error(err, 'Upstream LinkedIn scrape failed');
-        return reply.code(502).send({
-          statusCode: 502,
-          error: 'Bad Gateway',
-          code: 'UPSTREAM_SCRAPE_ERROR',
-          message: `Failed to scrape LinkedIn profile: ${err.message || 'Unknown network error'}`
-        });
-      }
+      await handleProfileLookup(profileUrl, skipCache, request, reply);
     }
   );
 
@@ -315,7 +336,7 @@ export const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =>
     {
       preHandler: verifyApiKey,
       schema: {
-        description: 'Extract structured public LinkedIn profile data by query parameter (?url=https://www.linkedin.com/in/...)',
+        description: 'Alias of POST /api/profile. Prefer POST so Swagger does not look like two calls. Still one LinkedIn request.',
         tags: ['Profile'],
         security: config.apiKey ? [{ apiKeyAuth: [] }] : [],
         querystring: {
@@ -329,21 +350,7 @@ export const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =>
       }
     },
     async (request, reply) => {
-      const url = request.query.url;
-      const skipCache = Boolean(request.query.skipCache);
-      // Delegate to POST handler logic
-      const req = {
-        ...request,
-        body: { profileUrl: url, skipCache }
-      } as any;
-      return (fastify as any).inject({
-        method: 'POST',
-        url: '/api/profile',
-        headers: request.headers,
-        payload: { profileUrl: url, skipCache }
-      }).then((res: any) => {
-        return reply.code(res.statusCode).headers(res.headers).send(JSON.parse(res.payload));
-      });
+      await handleProfileLookup(request.query.url, Boolean(request.query.skipCache), request, reply);
     }
   );
 

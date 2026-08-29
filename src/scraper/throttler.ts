@@ -1,4 +1,36 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from '../config.js';
+
+const QUOTA_FILE = path.join(process.cwd(), 'data', 'daily-quota.json');
+
+interface PersistedQuota {
+  day: string;
+  count: number;
+}
+
+function loadPersistedQuota(): PersistedQuota {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const raw = fs.readFileSync(QUOTA_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as PersistedQuota;
+    if (parsed?.day === today && typeof parsed.count === 'number') {
+      return { day: today, count: Math.max(0, parsed.count) };
+    }
+  } catch {
+    // Missing or unreadable file — start fresh for today
+  }
+  return { day: today, count: 0 };
+}
+
+function persistQuota(state: PersistedQuota): void {
+  try {
+    fs.mkdirSync(path.dirname(QUOTA_FILE), { recursive: true });
+    fs.writeFileSync(QUOTA_FILE, JSON.stringify(state), 'utf8');
+  } catch (err) {
+    console.warn('⚠️  Could not persist daily quota file:', err);
+  }
+}
 
 export class RequestThrottler {
   private lastRequestTimestamp = 0;
@@ -7,11 +39,18 @@ export class RequestThrottler {
   private queue: Array<() => void> = [];
   private isProcessing = false;
 
+  constructor() {
+    const loaded = loadPersistedQuota();
+    this.currentDay = loaded.day;
+    this.dailyCount = loaded.count;
+  }
+
   private checkAndResetDay(): void {
     const today = new Date().toISOString().slice(0, 10);
     if (today !== this.currentDay) {
       this.currentDay = today;
       this.dailyCount = 0;
+      persistQuota({ day: this.currentDay, count: this.dailyCount });
     }
   }
 
@@ -34,6 +73,7 @@ export class RequestThrottler {
     this.checkAndResetDay();
     this.dailyCount += 1;
     this.lastRequestTimestamp = Date.now();
+    persistQuota({ day: this.currentDay, count: this.dailyCount });
   }
 
   public async acquireThrottledSlot(): Promise<void> {

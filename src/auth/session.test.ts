@@ -1,15 +1,19 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   assertSessionConfigured,
   isSessionConfigured,
   getAuthHeaders,
   getVoyagerHeaders,
   validateSessionCookie,
+  resetLiveLinkedInBlockForTests,
   SessionAuthError
 } from './session.js';
 import { config } from '../config.js';
 
 describe('Auth & Session Module', () => {
+  beforeEach(() => {
+    resetLiveLinkedInBlockForTests();
+  });
   it('SessionAuthError formats standard 401 error response', () => {
     const error = new SessionAuthError('Session expired test');
     const response = error.toResponse();

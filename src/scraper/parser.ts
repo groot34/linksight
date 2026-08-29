@@ -72,15 +72,24 @@ export function parseVoyagerProfile(vanityName: string, raw: any): LinkedInProfi
   // 1. Identify Main Profile Entity
   let profileEntity: any = null;
   try {
-    profileEntity = included.find((item: any) =>
+    const fromIncluded = included.find((item: any) =>
       item.$type?.includes('identity.profile.Profile') ||
       item.$type?.includes('dash.identity.profile.Profile') ||
       item.entityUrn?.includes('fsd_profile')
-    ) || data;
+    );
 
-    // Fallback: search across raw elements if wrapped in Dash response
-    if (!profileEntity && Array.isArray(data.elements) && data.elements.length > 0) {
-      profileEntity = data.elements[0];
+    const dashElements = Array.isArray(data.elements)
+      ? data.elements
+      : Array.isArray(raw.elements)
+        ? raw.elements
+        : [];
+
+    if (fromIncluded) {
+      profileEntity = fromIncluded;
+    } else if (dashElements.length > 0) {
+      profileEntity = dashElements[0];
+    } else {
+      profileEntity = data;
     }
   } catch {
     profileEntity = data || {};
@@ -139,9 +148,9 @@ export function parseVoyagerProfile(vanityName: string, raw: any): LinkedInProfi
 
     for (const pos of rawPositions) {
       try {
-        const timePeriod = pos.timePeriod || {};
-        const startDate = formatLinkedInDate(timePeriod.startDate);
-        const endDate = formatLinkedInDate(timePeriod.endDate);
+        const timePeriod = pos.timePeriod || pos.dateRange || {};
+        const startDate = formatLinkedInDate(timePeriod.startDate || timePeriod.start);
+        const endDate = formatLinkedInDate(timePeriod.endDate || timePeriod.end);
 
         experience.push({
           title: pos.title || 'Unknown Position',
@@ -173,13 +182,13 @@ export function parseVoyagerProfile(vanityName: string, raw: any): LinkedInProfi
 
     for (const edu of rawEducations) {
       try {
-        const timePeriod = edu.timePeriod || {};
+        const timePeriod = edu.timePeriod || edu.dateRange || {};
         education.push({
           school: edu.schoolName || edu.school?.name || 'Unknown School',
           degree: edu.degreeName || null,
           field: edu.fieldOfStudy || null,
-          startDate: formatLinkedInDate(timePeriod.startDate),
-          endDate: formatLinkedInDate(timePeriod.endDate)
+          startDate: formatLinkedInDate(timePeriod.startDate || timePeriod.start),
+          endDate: formatLinkedInDate(timePeriod.endDate || timePeriod.end)
         });
       } catch {
         // Skip malformed individual education item

@@ -2,6 +2,31 @@ import axios, { AxiosInstance } from 'axios';
 import { config } from '../config.js';
 import { ApiErrorResponse } from '../types/index.js';
 
+/** Once LinkedIn rejects the cookie, do not send it again until process restart. */
+let liveLinkedInBlocked = false;
+let liveLinkedInBlockReason = '';
+
+export function isLiveLinkedInBlocked(): boolean {
+  return liveLinkedInBlocked;
+}
+
+export function blockLiveLinkedIn(reason: string): void {
+  liveLinkedInBlocked = true;
+  liveLinkedInBlockReason = reason;
+  console.warn(`🛑 [SAFETY] Live LinkedIn requests blocked for this process: ${reason}`);
+  console.warn('   No further outbound LinkedIn calls will be made until you restart the server with a fresh cookie.');
+}
+
+export function getLiveLinkedInBlockReason(): string {
+  return liveLinkedInBlockReason;
+}
+
+/** Test-only: clear the process-level block. */
+export function resetLiveLinkedInBlockForTests(): void {
+  liveLinkedInBlocked = false;
+  liveLinkedInBlockReason = '';
+}
+
 export interface AuthenticatedHttpClients {
   axiosInstance: AxiosInstance;
   headers: Record<string, string>;
@@ -76,6 +101,8 @@ export function getAuthHeaders(): Record<string, string> {
     'Accept': 'application/vnd.linkedin.normalized+json+2.1',
     'Accept-Language': 'en-US,en;q=0.9',
     'Cookie': cookieHeader,
+    'Referer': 'https://www.linkedin.com/',
+    'Origin': 'https://www.linkedin.com',
     'x-li-lang': 'en_US',
     'x-restli-protocol-version': '2.0.0'
   };
@@ -142,6 +169,7 @@ export async function validateSessionCookie(httpClient?: AxiosInstance): Promise
     }
 
     if (response.status === 401 || response.status === 403 || response.status === 302) {
+      blockLiveLinkedIn(`auth check HTTP ${response.status}`);
       return {
         valid: false,
         error: 'LinkedIn session cookie is expired or invalid (HTTP ' + response.status + ').'

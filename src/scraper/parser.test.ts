@@ -128,4 +128,35 @@ describe('Voyager Parser & Phase 4 Schema', () => {
     expect(parsed.languages).toEqual([]);
     expect(parsed.scrapedAt).toBeDefined();
   });
+
+  it('parses Dash envelope with data.elements[0] and dateRange', () => {
+    const parsed = parseVoyagerProfile('satyanadella', {
+      data: {
+        elements: [
+          {
+            entityUrn: 'urn:li:fsd_profile:ABC',
+            firstName: 'Satya',
+            lastName: 'Nadella',
+            headline: 'CEO at Microsoft',
+            positions: {
+              elements: [
+                {
+                  title: 'CEO',
+                  companyName: 'Microsoft',
+                  dateRange: {
+                    start: { year: 2014, month: 2 }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      included: []
+    });
+
+    expect(parsed.name).toBe('Satya Nadella');
+    expect(parsed.experience[0]?.title).toBe('CEO');
+    expect(parsed.experience[0]?.startDate).toBe('2014-02');
+  });
 });

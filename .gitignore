@@ -34,7 +34,7 @@ coverage/
 playwright-report/
 test-results/
 .cache/
-data/cache/
+data/
 
 # OS and Editor files
 .DS_Store

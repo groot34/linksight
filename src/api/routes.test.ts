@@ -7,6 +7,7 @@ import { LinkedInProfile } from '../types/index.js';
 
 describe('API Routes (Phase 5)', () => {
   let app: FastifyInstance;
+  let originalApiKey: string;
 
   const mockProfile: LinkedInProfile = {
     profileUrl: 'https://www.linkedin.com/in/satyanadella',
@@ -42,11 +43,14 @@ describe('API Routes (Phase 5)', () => {
   };
 
   beforeAll(async () => {
+    originalApiKey = config.apiKey;
+    config.apiKey = '';
     app = await buildApp();
     await app.ready();
   });
 
   afterAll(async () => {
+    config.apiKey = originalApiKey;
     await app.close();
   });
 
