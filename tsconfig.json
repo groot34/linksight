@@ -17,10 +17,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "declaration": true,
-    "sourceMap": true,
-    "types": [
-      "node"
-    ]
+    "sourceMap": true
   },
   "include": [
     "src/**/*"
