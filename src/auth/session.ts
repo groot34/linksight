@@ -103,6 +103,9 @@ export function getAuthHeaders(): Record<string, string> {
     'Cookie': cookieHeader,
     'Referer': 'https://www.linkedin.com/',
     'Origin': 'https://www.linkedin.com',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
     'x-li-lang': 'en_US',
     'x-restli-protocol-version': '2.0.0'
   };
