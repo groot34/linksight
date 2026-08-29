@@ -14,7 +14,9 @@ Instead, authentication operates via **session injection** using your browser's 
 
 ---
 
-### How to Retrieve `li_at` and `JSESSIONID` (Step-by-Step)
+### How to Retrieve li_at and JSESSIONID (Step-by-Step)
+
+![LinkedIn Cookie Extraction in DevTools](assets/image.png)
 
 1. Open your regular browser (Chrome, Brave, Edge, Firefox, or Safari) where you are already logged into [linkedin.com](https://www.linkedin.com).
 2. Open **Developer Tools**:
