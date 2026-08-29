@@ -45,7 +45,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       },
       servers: [
         {
-          url: `http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`,
+          url: '/',
           description: 'Current Server'
         }
       ],
